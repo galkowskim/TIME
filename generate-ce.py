@@ -49,6 +49,8 @@ def arguments():
     parser.add_argument('--neg_custom_token', type=str, default='|<A*N>|')
     parser.add_argument('--custom_token', type=str, default='|<A*>|')
     parser.add_argument('--custom_obj_token', type=str, default='|<C*>|')
+    parser.add_argument('--generic_custom_token', type=str, default='|<AC*&>|',
+                        help='Template token for multiclass prompts; "&" is replaced with class id')
     parser.add_argument('--base_prompt', type=str, default='A |<C*>| picture')
     parser.add_argument('--embedding_files', type=str, nargs='+', default=[])
 
@@ -68,6 +70,13 @@ def arguments():
     parser.add_argument('--label_target', type=int, default=-1)
     parser.add_argument('--data_dir', type=str, default='/home/personnels/jeanner211/DATASETS/celeba')
     parser.add_argument('--dataset', type=str, default='CelebAHQ')
+    parser.add_argument('--dataset_source', type=str, default='torchvision',
+                        choices=['torchvision', 'hf'],
+                        help='Where to load the dataset from (only used for ImageNet)')
+    parser.add_argument('--hf_token', type=str, default='',
+                        help='HuggingFace token (defaults to HF_TOKEN env var)')
+    parser.add_argument('--hf_cache', type=str, default='',
+                        help='HF datasets cache dir (defaults to DATASET_CACHE env var)')
     parser.add_argument('--batch_size', type=int, default=1)
 
     # classifier params
@@ -251,7 +260,7 @@ def main():
         # =================================================================
         # CE generation
         transformed = torch.zeros_like(lab).bool()
-        
+
         for jdx, (gsi, gsd, nis) in enumerate(zip(args.guidance_scale_invertion,
                                              args.guidance_scale_denoising,
                                              args.num_inference_steps)):

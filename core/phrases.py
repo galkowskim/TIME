@@ -32,7 +32,7 @@ def get_phrase_generator(args):
     if args.dataset == 'CelebAHQ':
         if args.phase == 'context':
             return generate_context_phrase
-        
+
         else:
             return partial(generate_class_phrase,
                            base_prompt=args.base_prompt,
@@ -41,11 +41,17 @@ def get_phrase_generator(args):
     elif args.dataset == 'BDD100k':
         if args.phase == 'context':
             return generate_context_phrase
-        
+
         else:
             return partial(generate_class_phrase,
                            base_prompt=args.base_prompt,
                            inbetween='indicating to')
 
     else:
-        raise ValueError(f'Dataset {args.dataset} not available')
+        # Default mapping for multiclass datasets like ImageNet
+        if args.phase == 'context':
+            return generate_context_phrase
+        else:
+            return partial(generate_class_phrase,
+                           base_prompt=args.base_prompt,
+                           inbetween='of a')

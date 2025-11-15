@@ -1,4 +1,4 @@
-# I based the embedding learning on this repo 
+# I based the embedding learning on this repo
 # https://colab.research.google.com/github/huggingface/notebooks/blob/main/diffusers/sd_textual_inversion_training.ipynb
 
 import os
@@ -45,8 +45,15 @@ def arguments():
     parser.add_argument('--data_dir', type=str, default='/home/2017025/gjeann01/save/celeba')
     parser.add_argument('--partition', type=str, default='train')
     parser.add_argument('--dataset', type=str, default='CelebAHQ')
+    parser.add_argument('--dataset_source', type=str, default='torchvision',
+                        choices=['torchvision', 'hf'],
+                        help='Where to load the dataset from (only used for ImageNet)')
+    parser.add_argument('--hf_token', type=str, default='',
+                        help='HuggingFace token (defaults to HF_TOKEN env var)')
+    parser.add_argument('--hf_cache', type=str, default='',
+                        help='HF datasets cache dir (defaults to DATASET_CACHE env var)')
     parser.add_argument('--seed', type=int, default=99999999)
-    
+
     # classifier arguments
     parser.add_argument('--label_query', type=int, default=31)
     parser.add_argument('--training_label', type=int, default=-1,
@@ -195,7 +202,7 @@ def main():
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
                 bsz = latents.shape[0]
-                
+
                 # Sample a random timestep for each image
                 timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=device)
                 timesteps = timesteps.long()
@@ -233,7 +240,7 @@ def main():
 
         optimizer.step()
         optimizer.zero_grad()
-        
+
         if (iterations % 500 == 0) or (iterations > args.iterations):
             with torch.no_grad():
                 embeddings = text_encoder.get_input_embeddings().weight.data

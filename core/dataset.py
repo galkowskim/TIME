@@ -8,6 +8,7 @@ import torch
 import torch.nn.functional as F
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
+from datasets import load_dataset
 
 from tqdm import tqdm
 
@@ -64,7 +65,99 @@ def get_dataset(args, normalize=True, training=True):
             dataset = (BDD100kForCE(**dataset_kwargs), bdd_postprocessing)
 
     elif args.dataset == 'ImageNet':
-        pass
+        # Choose between torchvision ImageFolder and HuggingFace datasets
+        source = getattr(args, 'dataset_source', 'torchvision')
+        if source == 'hf':
+            split = args.partition
+            if split == 'val':
+                split = 'validation'
+            dataset = HFImageNetDataset(
+                image_size=args.image_size,
+                split=split,
+                hf_token=getattr(args, 'hf_token', os.environ.get('HF_TOKEN', None)),
+                cache_dir=getattr(args, 'hf_cache', os.environ.get('DATASET_CACHE', None)),
+                normalize=normalize
+            )
+            if training:
+                # Optionally restrict to a single label if label_query is set
+                if getattr(args, 'label_query', -1) is not None and args.label_query != -1:
+                    class_id = int(args.label_query)
+                    class HFImageNetSubset(torch.utils.data.Dataset):
+                        def __init__(self, base, target_label):
+                            self.base = base
+                            self.target_label = target_label
+                            # precompute indexes for speed
+                            self.indexes = [i for i in range(len(base)) if base.data[i]['label'] == target_label]
+                        def __len__(self):
+                            return len(self.indexes)
+                        def __getitem__(self, i):
+                            img, _ = self.base[self.indexes[i]]
+                            return img
+                    dataset = HFImageNetSubset(dataset, class_id)
+                # else: return images only for training (labels unused)
+                else:
+                    class HFImageNetImages(torch.utils.data.Dataset):
+                        def __init__(self, base):
+                            self.base = base
+                        def __len__(self):
+                            return len(self.base)
+                        def __getitem__(self, i):
+                            return self.base[i][0]
+                    dataset = HFImageNetImages(dataset)
+            else:
+                dataset = (dataset, celebahq_postprocessing)
+        else:
+            # torchvision path: ImageNet follows ImageFolder structure:
+            #   <data_dir>/train/<class>/<img>.JPEG
+            #   <data_dir>/val/<class>/<img>.JPEG
+            # We keep images in [-1, 1] for diffusion by normalizing with 0.5/0.5.
+            tfm_train = transforms.Compose([
+                transforms.Resize(args.image_size),
+                transforms.RandomHorizontalFlip(),
+                transforms.CenterCrop(args.image_size),
+                transforms.RandomResizedCrop(args.image_size, (0.95, 1.0)),
+                transforms.ToTensor(),
+                transforms.Normalize([0.5, 0.5, 0.5],
+                                     [0.5, 0.5, 0.5]) if normalize else lambda x: x
+            ])
+            tfm_eval = transforms.Compose([
+                transforms.Resize(args.image_size),
+                transforms.CenterCrop(args.image_size),
+                transforms.ToTensor(),
+                transforms.Normalize([0.5, 0.5, 0.5],
+                                     [0.5, 0.5, 0.5]) if normalize else lambda x: x
+            ])
+            root = osp.join(args.data_dir, 'train' if training else args.partition)
+            if training:
+                base_ds = datasets.ImageFolder(root=root, transform=tfm_train)
+                # If a specific class is requested, restrict to that label.
+                # This mirrors SlowSingleLabel but avoids the tqdm scan.
+                if getattr(args, 'label_query', -1) is not None and args.label_query != -1:
+                    target_label = int(args.label_query)
+                    indexes = [i for i, t in enumerate(base_ds.targets) if t == target_label]
+                    class ImageNetSubset(torch.utils.data.Dataset):
+                        def __init__(self, ds, idxs):
+                            self.ds = ds
+                            self.idxs = idxs
+                        def __len__(self):
+                            return len(self.idxs)
+                        def __getitem__(self, i):
+                            return self.ds[self.idxs[i]][0]
+                    dataset = ImageNetSubset(base_ds, indexes)
+                else:
+                    # Return only images; labels are unused by the trainer.
+                    class ImageNetImages(torch.utils.data.Dataset):
+                        def __init__(self, ds):
+                            self.ds = ds
+                        def __len__(self):
+                            return len(self.ds)
+                        def __getitem__(self, i):
+                            return self.ds[i][0]
+                    dataset = ImageNetImages(base_ds)
+            else:
+                # For generation/eval we need (dataset, postprocess)
+                dataset = (NamedImageFolder(root=root, transform=tfm_eval),
+                           celebahq_postprocessing)
 
     return dataset
 
@@ -278,7 +371,7 @@ class FilteredBDD100k(BDD100k):
 
         predictions = pd.read_csv('utils/bdd100k-{}-prediction-label-{}.csv'.format(kwargs['partition'], kwargs['label_query']))
         operator = (lambda x, y: x != y) if negate else (lambda x, y: x == y)
-        
+
         data = predictions['idx'][operator(predictions['prediction'], filter_by)]
         # filter names, might be a little brute forced :P
         self.items = [x for x in filter(lambda x: data.eq(x).any(), self.items)]
@@ -326,6 +419,31 @@ class ImageFolderFiltered(NamedImageFolder):
 # ============================================================================
 # Other dataset wrappers
 # ============================================================================
+
+class HFImageNetDataset(torch.utils.data.Dataset):
+    def __init__(self, image_size, split='validation', hf_token=None, cache_dir=None, normalize=True):
+        self.image_size = image_size
+        kwargs = {'trust_remote_code': True}
+        if hf_token is not None:
+            kwargs['token'] = hf_token
+        if cache_dir is not None:
+            kwargs['cache_dir'] = cache_dir
+        self.data = load_dataset('imagenet-1k', split=split, **kwargs)
+        self.transform = transforms.Compose([
+            transforms.Resize(image_size),
+            transforms.CenterCrop(image_size),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5, 0.5, 0.5],
+                                 [0.5, 0.5, 0.5]) if normalize else lambda x: x
+        ])
+    def __len__(self):
+        return len(self.data)
+    def __getitem__(self, index):
+        item = self.data[index]
+        img = item['image']
+        lab = item['label']
+        img = self.transform(img.convert('RGB'))
+        return img, lab
 
 
 class TextualDataset():
