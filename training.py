@@ -18,6 +18,9 @@ from core.dataset import get_dataset, TextualDataset
 from core.utils import Print, add_new_tokens, load_tokens_and_embeddings, save_tokens_and_embeddings
 from core.phrases import get_phrase_generator
 
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def freeze(m, names):
     for n in names:
@@ -166,6 +169,7 @@ def main():
                              shuffle=True,
                              worker_init_fn=seed_worker,
                              generator=g)
+    print("Initialized dataset with", len(dataset), "images")
 
     # =================================================================
     # Training Loop

@@ -6,6 +6,8 @@ import PIL.Image as Image
 
 import torch
 
+from tqdm import tqdm
+
 
 def Print(*args, **kwargs):
     print('_' * 50)
@@ -292,7 +294,7 @@ def load_tokens_and_embeddings(
     if len(files) == 0:
         print('No embedding files loaded')
 
-    for file in files:
+    for file in tqdm(files, desc='Loading tokens and embeddings'):
         # load file
         d = torch.load(file, map_location='cpu')
 

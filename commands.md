@@ -1,3 +1,12 @@
+### Creating env
+
+```bash
+conda env create -f time_env.yaml
+conda activate time
+
+pip install --upgrade datasets==3.1.0 huggingface-hub==0.23.0 python-dotenv
+```
+
 ### Train context tokens
 
 ```bash

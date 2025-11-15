@@ -12,6 +12,10 @@ from datasets import load_dataset
 
 from tqdm import tqdm
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # ============================================================================
 # Variable for binary and multiclass datasets
 # ============================================================================
@@ -74,8 +78,8 @@ def get_dataset(args, normalize=True, training=True):
             dataset = HFImageNetDataset(
                 image_size=args.image_size,
                 split=split,
-                hf_token=getattr(args, 'hf_token', os.environ.get('HF_TOKEN', None)),
-                cache_dir=getattr(args, 'hf_cache', os.environ.get('DATASET_CACHE', None)),
+                hf_token=os.environ.get('HF_TOKEN', None),
+                cache_dir=os.environ.get('DATASET_CACHE', None),
                 normalize=normalize
             )
             if training:
@@ -424,11 +428,14 @@ class HFImageNetDataset(torch.utils.data.Dataset):
     def __init__(self, image_size, split='validation', hf_token=None, cache_dir=None, normalize=True):
         self.image_size = image_size
         kwargs = {'trust_remote_code': True}
+        kwargs = {}
         if hf_token is not None:
             kwargs['token'] = hf_token
+            # kwargs['use_auth_token'] = True
         if cache_dir is not None:
             kwargs['cache_dir'] = cache_dir
         self.data = load_dataset('imagenet-1k', split=split, **kwargs)
+        print(f'Loaded ImageNet-1k {split} split with {len(self.data)} images from HuggingFace datasets')
         self.transform = transforms.Compose([
             transforms.Resize(image_size),
             transforms.CenterCrop(image_size),
