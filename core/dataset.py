@@ -6,6 +6,7 @@ import PIL.Image as Image
 
 import torch
 import torch.nn.functional as F
+import numpy as np
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from datasets import load_dataset
@@ -86,18 +87,7 @@ def get_dataset(args, normalize=True, training=True):
                 # Optionally restrict to a single label if label_query is set
                 if getattr(args, 'label_query', -1) is not None and args.label_query != -1:
                     class_id = int(args.label_query)
-                    class HFImageNetSubset(torch.utils.data.Dataset):
-                        def __init__(self, base, target_label):
-                            self.base = base
-                            self.target_label = target_label
-                            # precompute indexes for speed
-                            self.indexes = [i for i in range(len(base)) if base.data[i]['label'] == target_label]
-                        def __len__(self):
-                            return len(self.indexes)
-                        def __getitem__(self, i):
-                            img, _ = self.base[self.indexes[i]]
-                            return img
-                    dataset = HFImageNetSubset(dataset, class_id)
+                    dataset = HFImageNetSubsetImages(dataset, class_id)
                 # else: return images only for training (labels unused)
                 else:
                     class HFImageNetImages(torch.utils.data.Dataset):
@@ -427,7 +417,6 @@ class ImageFolderFiltered(NamedImageFolder):
 class HFImageNetDataset(torch.utils.data.Dataset):
     def __init__(self, image_size, split='validation', hf_token=None, cache_dir=None, normalize=True):
         self.image_size = image_size
-        kwargs = {'trust_remote_code': True}
         kwargs = {}
         if hf_token is not None:
             kwargs['token'] = hf_token
@@ -451,6 +440,22 @@ class HFImageNetDataset(torch.utils.data.Dataset):
         lab = item['label']
         img = self.transform(img.convert('RGB'))
         return img, lab
+
+
+class HFImageNetSubsetImages(torch.utils.data.Dataset):
+    def __init__(self, base: HFImageNetDataset, target_label: int, num_proc=None):
+        self.transform = base.transform
+        desc = f'Filtering ImageNet label == {target_label}'
+        self.data = base.data.filter(lambda ex: ex['label'] == target_label,
+                                     num_proc=num_proc,
+                                     desc=desc)
+        print(f'Subset size for label {target_label}: {len(self.data)}')
+    def __len__(self):
+        return len(self.data)
+    def __getitem__(self, index):
+        item = self.data[index]
+        img = item['image']
+        return self.transform(img.convert('RGB'))
 
 
 class TextualDataset():
