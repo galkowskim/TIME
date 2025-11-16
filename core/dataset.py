@@ -443,12 +443,12 @@ class HFImageNetDataset(torch.utils.data.Dataset):
 
 
 class HFImageNetSubsetImages(torch.utils.data.Dataset):
-    def __init__(self, base: HFImageNetDataset, target_label: int, num_proc=None):
+    def __init__(self, base: HFImageNetDataset, target_label: int):
         self.transform = base.transform
-        desc = f'Filtering ImageNet label == {target_label}'
-        self.data = base.data.filter(lambda ex: ex['label'] == target_label,
-                                     num_proc=num_proc,
-                                     desc=desc)
+        # Faster than .filter: build index list from the 'label' column, then select.
+        labels = base.data['label']  # Arrow -> Python list of ints
+        indexes = [i for i, l in enumerate(labels) if l == target_label]
+        self.data = base.data.select(indexes)  # cheap view on underlying table
         print(f'Subset size for label {target_label}: {len(self.data)}')
     def __len__(self):
         return len(self.data)
