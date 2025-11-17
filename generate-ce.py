@@ -331,7 +331,7 @@ def main():
             if jdx == 0:
                 ce = cf.clone().detach()
             ce[~transformed] = cf
-            transformed[~transformed] = flipped
+            transformed[~transformed] = flipped.bool()
             if transformed.float().sum().item() == transformed.size(0):
                 break
 
