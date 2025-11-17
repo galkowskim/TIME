@@ -352,7 +352,8 @@ def main():
         stats['explanation']['cf5'] += cf5.sum().item()
         stats['explanation']['l1'] += l1.sum().item()
         stats['explanation']['l inf'] += linf.sum().item()
-        stats['explanation']['p'] += prob[cf].sum().item()
+        # Use boolean mask to select flipped samples' probabilities
+        stats['explanation']['p'] += prob[cf.bool()].sum().item()
 
         # save images
         image_saver(
