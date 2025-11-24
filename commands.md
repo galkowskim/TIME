@@ -12,11 +12,10 @@ pip install --upgrade datasets==3.1.0 huggingface-hub==0.23.0 python-dotenv
 ```bash
 python training.py \
   --dataset ImageNet --dataset_source hf --partition train \
-  --sd_model CompVis/stable-diffusion-v1-4 --image_size 512 \
   --output_path context.pth \
   --custom_tokens '|<C*1>|' '|<C*2>|' '|<C*3>|' \
   --custom_tokens_init centered realistic photo \
-  --phase context --mini_batch_size 1 \
+  --phase context --label-query -1 --mini_batch_size 1 \
   --enable_xformers_memory_efficient_attention
 ```
 
@@ -28,7 +27,6 @@ python training.py \
 python training.py \
   --dataset ImageNet --dataset_source hf --partition train \
   --label_query 340 \
-  --sd_model CompVis/stable-diffusion-v1-4 --image_size 512 \
   --embedding-files context.pth \
   --output_path class-340.pth \
   --custom_tokens '|<AC*340>|' \
@@ -41,7 +39,6 @@ python training.py \
 python training.py \
   --dataset ImageNet --dataset_source hf --partition train \
   --label_query 339 \
-  --sd_model CompVis/stable-diffusion-v1-4 --image_size 512 \
   --embedding-files context.pth \
   --output_path class-339.pth \
   --custom_tokens '|<AC*339>|' \
@@ -61,8 +58,8 @@ python generate-ce.py \
   --embedding_files context.pth class-340.pth class-339.pth \
   --generic_custom_token '|<AC*&>|' \
   --base_prompt 'A |<C*1>| |<C*2>| |<C*3>| photo' \
-  --output_path /path/to/results --exp_name zebra_to_sorrel \
-  --label_query 0 --label_target 339 \
+  --output_path ./results --exp_name zebra_to_sorrel \
+  --label_query 340 --label_target 339 \
   --guidance-scale-invertion 5 --guidance-scale-denoising 5 \
   --num_inference_steps 35 --enable_xformers_memory_efficient_attention
 ```
