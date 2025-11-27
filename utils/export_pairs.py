@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import argparse
 import os
 import shutil
@@ -22,9 +21,8 @@ def find_cf_images(results_dir: Path) -> List[Path]:
             for level3 in level2.glob("*"):  # CCF, ICF
                 if not level3.is_dir():
                     continue
-                cf_dir = level3 / "CF"
-                if cf_dir.is_dir():
-                    cf_dirs.append(cf_dir)
+                if level3.is_dir() and str(level3).endswith("CF"):
+                    cf_dirs.append(level3)
     pngs: List[Path] = []
     for d in cf_dirs:
         pngs.extend(sorted(d.glob("*.png")))
@@ -80,7 +78,7 @@ def main():
             continue
 
         images_name = f"images_{idx:05d}.png"
-        inpaint_name = f"inpaint_{idx:05d}.png"
+        inpaint_name = f"inpaints_{idx:05d}.png"
 
         shutil.copyfile(orig_path, output / images_name)
         shutil.copyfile(cf_path, output / inpaint_name)

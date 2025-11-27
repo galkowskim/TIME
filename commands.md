@@ -63,3 +63,11 @@ python generate-ce.py \
   --guidance-scale-invertion 5 --guidance-scale-denoising 5 \
   --num_inference_steps 35 --enable_xformers_memory_efficient_attention
 ```
+
+
+### Export image pairs
+
+# here the exp_name should have been the other way round to reflect the flip from sorrel to zebra
+```bash
+python utils/export_pairs.py --source results_500_images_339_340/ --exp_name zebra_to_sorrel --output_path /mnt/evafs/groups/ganzha_23/mgalkowski/copy_testing/inp_exp/outputs/a_final_339_340_24h/prepared/TIME
+```
