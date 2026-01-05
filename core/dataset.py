@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import numpy as np
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
+from torchvision.models import resnet50, ResNet50_Weights
 from datasets import load_dataset
 
 from tqdm import tqdm
@@ -87,7 +88,11 @@ def get_dataset(args, normalize=True, training=True):
                 # Optionally restrict to a single label if label_query is set
                 if getattr(args, 'label_query', -1) is not None and args.label_query != -1:
                     class_id = int(args.label_query)
-                    dataset = HFImageNetSubsetImages(dataset, class_id)
+                    require_agree = getattr(args, 'require_classifier_agreement', False)
+                    if require_agree:
+                        dataset = HFImageNetSubsetAgreedLabeled(dataset, class_id)
+                    else:
+                        dataset = HFImageNetSubsetLabeled(dataset, class_id)
                 # else: return images only for training (labels unused)
                 else:
                     class HFImageNetImages(torch.utils.data.Dataset):
@@ -99,6 +104,14 @@ def get_dataset(args, normalize=True, training=True):
                             return self.base[i][0]
                     dataset = HFImageNetImages(dataset)
             else:
+                # For eval/generation, optionally prefilter by class (and classifier agreement)
+                if getattr(args, 'label_query', -1) is not None and args.label_query != -1:
+                    class_id = int(args.label_query)
+                    require_agree = getattr(args, 'require_classifier_agreement', False)
+                    if require_agree:
+                        dataset = HFImageNetSubsetAgreedLabeled(dataset, class_id)
+                    else:
+                        dataset = HFImageNetSubsetLabeled(dataset, class_id)
                 dataset = (dataset, celebahq_postprocessing)
         else:
             # torchvision path: ImageNet follows ImageFolder structure:
@@ -456,6 +469,59 @@ class HFImageNetSubsetImages(torch.utils.data.Dataset):
         item = self.data[index]
         img = item['image']
         return self.transform(img.convert('RGB'))
+
+
+class HFImageNetSubsetLabeled(torch.utils.data.Dataset):
+    def __init__(self, base: HFImageNetDataset, target_label: int):
+        self.transform = base.transform
+        labels = base.data['label']
+        indexes = [i for i, l in enumerate(labels) if l == target_label]
+        self.data = base.data.select(indexes)
+        self.target_label = target_label
+        print(f'Subset (labeled) size for label {target_label}: {len(self.data)}')
+    def __len__(self):
+        return len(self.data)
+    def __getitem__(self, index):
+        item = self.data[index]
+        img = item['image']
+        lab = item['label']
+        return self.transform(img.convert('RGB')), lab
+
+
+class HFImageNetSubsetAgreedLabeled(torch.utils.data.Dataset):
+    def __init__(self, base: HFImageNetDataset, target_label: int, batch_size: int = 128):
+        self.transform = base.transform
+        labels = base.data['label']
+        class_indexes = [i for i, l in enumerate(labels) if l == target_label]
+        # Build classifier
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        weights = ResNet50_Weights.IMAGENET1K_V1
+        preprocess = weights.transforms()
+        model = resnet50(weights=weights).to(device).eval()
+        agreed: list[int] = []
+        # Evaluate in batches
+        for i in range(0, len(class_indexes), batch_size):
+            idxs = class_indexes[i:i + batch_size]
+            batch = []
+            for j in idxs:
+                img = base.data[j]['image']
+                batch.append(preprocess(img.convert('RGB')))
+            x = torch.stack(batch, dim=0).to(device)
+            with torch.no_grad():
+                pred = model(x).argmax(dim=1).cpu().tolist()
+            for off, p in enumerate(pred):
+                if p == target_label:
+                    agreed.append(idxs[off])
+        self.data = base.data.select(agreed)
+        self.target_label = target_label
+        print(f'Classifier-agreed subset size for label {target_label}: {len(self.data)}')
+    def __len__(self):
+        return len(self.data)
+    def __getitem__(self, index):
+        item = self.data[index]
+        img = item['image']
+        lab = item['label']
+        return self.transform(img.convert('RGB')), lab
 
 
 class TextualDataset():

@@ -77,6 +77,8 @@ def arguments():
                         help='HuggingFace token (defaults to HF_TOKEN env var)')
     parser.add_argument('--hf_cache', type=str, default='',
                         help='HF datasets cache dir (defaults to DATASET_CACHE env var)')
+    parser.add_argument('--require_classifier_agreement', action='store_true',
+                        help='When filtering ImageNet by class, keep only samples where ResNet50 predicts the same class')
     parser.add_argument('--batch_size', type=int, default=1)
 
     # classifier params
@@ -164,9 +166,14 @@ def main():
         filter_label = 1 - args.label_target \
                  if args.dataset in BINARYDATASET else args.label_query
 
-    dataset = SlowSingleLabel(label=filter_label,
-                              dataset=dataset,
-                              maxlen=args.num_samples)
+    # If we already prefiltered (ImageNet HF + class id), skip SlowSingleLabel
+    prefiltered = (args.dataset == 'ImageNet' and
+                   args.dataset_source == 'hf' and
+                   args.label_query != -1)
+    if not prefiltered:
+        dataset = SlowSingleLabel(label=filter_label,
+                                  dataset=dataset,
+                                  maxlen=args.num_samples)
 
     dataset = ChunkedDataset(dataset,
                              chunk=args.chunk,
