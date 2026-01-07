@@ -174,6 +174,17 @@ def main():
         dataset = SlowSingleLabel(label=filter_label,
                                   dataset=dataset,
                                   maxlen=args.num_samples)
+    else:
+        # Still honor num_samples by taking the head of the prefiltered dataset
+        class _HeadDataset(torch.utils.data.Dataset):
+            def __init__(self, base, maxlen):
+                self.base = base
+                self.n = min(maxlen, len(base))
+            def __len__(self):
+                return self.n
+            def __getitem__(self, i):
+                return self.base[i]
+        dataset = _HeadDataset(dataset, args.num_samples)
 
     dataset = ChunkedDataset(dataset,
                              chunk=args.chunk,
